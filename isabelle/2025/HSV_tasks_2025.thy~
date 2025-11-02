@@ -153,17 +153,53 @@ fun sum10_pall :: "nat list \<Rightarrow> nat"
    "sum10_pall [] = 0"
  | "sum10_pall (d # ds) = 10 * sum10_pall ds + d + d * (10 ^ (2 * length (d # ds) - 1))"
 
+value "sum10_pall [1,2]"
+
 lemma sum10_pall_equiv:
   "sum10_pall ds = sum10 (pallindrome ds)" 
-  sorry
+proof (induct ds)
+  case Nil
+  thus ?case by simp
+next
+  case (Cons x xs)
+  (*split both palindrome terms*)
+  have "pallindrome (x # xs) = x # pallindrome xs  @ [x]" by simp
+  then have "sum10 (x # (pallindrome xs)) = 10 * sum10(pallindrome xs) + x" by simp
+  then have "sum10 (xs @ [x]) = sum10 xs + x  * (10 ^ (length (xs))::nat)"
+    by (simp add: sum10_snoc)  
+  then have non_pall_case : "sum10 (x # xs @ [x]) = 10 * sum10 xs + x  + x  * (10 ^ (length (x # xs))::nat)"
+    by simp
+  then have "length (pallindrome xs) = 2 * length xs" 
+    by simp
+  then have "length (d # pallindrome xs) = 2 * length xs + 1" 
+    by simp
+  then have non_pall_case : "sum10 (x # (pallindrome xs) @ [x]) = 
+    10 * sum10 (pallindrome xs) + x  + x  * (10 ^ (length (x # pallindrome xs))::nat)"
+    by (metis Cons_eq_appendI add.commute mult.commute sum10.simps(2) sum10_snoc)
+  then have "sum10 (x # (pallindrome xs) @ [x]) = 10 * sum10 (pallindrome xs) 
+    + x  + x  * (10 ^ (2 * length (x # xs) - 1)::nat)"
+    by simp
+  then have "sum10 (x # (pallindrome xs) @ [x]) = 10 * sum10 (pallindrome xs) 
+    + x  + x  * (10 ^ (2 * length (x # xs) - 1)::nat)"
+    by simp
+  then have "sum10 (x # (pallindrome xs) @ [x]) = 
+    10 * sum10 (pallindrome xs) + x + x * (10 ^ (2 * length (x # xs) - 1)::nat)"
+    by simp
+  then have "sum10 (pallindrome (x # xs)) = sum10 (x # pallindrome xs @ [x])" by simp
+  then have "sum10 (pallindrome (x # xs)) = 10 * sum10 (pallindrome xs) + x + x * (10 ^ (2 * length (x # xs) - 1)::nat)"
+    using \<open>sum10 (x # pallindrome xs @ [x]) = 10 * sum10 (pallindrome xs) + x + x * 10 ^ (2 * length (x # xs) - 1)\<close> by argo
+    
+  thus ?case
+    using local.Cons sum10_pall.simps(2) by presburger 
+qed
 
-lemma divides_formula:
+lemma dvd11_prim:
   "\<forall>n::nat. 11 dvd (x + x * (10 ^ (2 * n + 1)::nat))"
 proof
   fix n :: nat
-  have equivalence: "x + x * (10 ^ (2 * n + 1)::nat) = x * (1 + 10 ^ (2 * n + 1)::nat)"
+  have "x + x * (10 ^ (2 * n + 1)::nat) = x * (1 + 10 ^ (2 * n + 1)::nat)"
     by simp
-  have base: "11 dvd (1 + 10 ^ (2 * n + 1) ::nat)"
+  then have base: "11 dvd (1 + 10 ^ (2 * n + 1) ::nat)"
   proof (induct n)
     case 0
     show ?case by simp
@@ -180,50 +216,8 @@ proof
       hence "11 dvd (1 + 100 * ?A)" by simp
       thus ?case by simp
   qed
-  from base show "11 dvd (x + x * (10 ^ (2 * n + 1)))"
-    using equivalence by (simp add: dvd_mult)
-qed
-
-
-lemma sum10_pall_div11_:
-  "11 dvd sum10_pall ds"
-proof (induct ds)
-  case Nil
-  then show ?case by simp
-next
-  case (Cons x xs)
-  let ?sum10_pall_tail = "10 * sum10_pall xs"
-  have "\<exists> n ::nat. sum10_pall (x # xs) = ?sum10_pall_tail + x + x * (10 ^ (2 * n - 1))" 
-    using sum10_pall.simps(2) by blast
-  then have "11 dvd ?sum10_pall_tail"
-    using Cons.hyps Cons.prems dvd_mult by blast
-  then have "\<forall> n ::nat. 11 dvd (x + x * (10 ^ (2 * n + 1)::nat))" proof -
-    fix n ::nat
-    have equivalence: "\<forall> n::nat. x + x * (10 ^ (2 * n + 1)::nat) = x * (1 + 10 ^ (2 * n + 1)::nat)" by simp
-    then have "11 dvd (1 + 10 ^ (2 * n + 1)::nat)" proof (induct n)
-      case 0
-      then show ?case by simp
-    next
-      case (Suc prev)
-      let ?A = "10 ^ (2 * prev + 1)::nat"
-      have old_case: "11 dvd (1 + ?A)" using local.Suc by simp
-      moreover have "1 + 10 ^ (2 * Suc prev + 1) 
-                   = 1 + 100 * ?A" 
-        by (simp add: power_add)
-      hence "1 + 100 * ?A = (1 + ?A) + 99 * ?A" by simp
-      hence "11 dvd 99 * ?A" by simp  
-      hence "11 dvd (1 + ?A) + 99 * ?A" using old_case by fastforce 
-      hence "11 dvd (1 + 100 * ?A)" by simp
-      thus ?case by simp
-    qed
-    then have "11 dvd (x * (1 + 10 ^ (2 * n + 1)::nat))" by fastforce
-    then have "11 dvd (x + x * (10 ^ (2 * n + 1)::nat))" by simp
-    then show ?thesis sorry
-  qed
-  then show ?case
-  by (metis (no_types, lifting) \<open>11 dvd 10 * sum10_pall xs\<close>
-      \<open>\<exists>n. sum10_pall (x # xs) = 10 * sum10_pall xs + x + x * 10 ^ (2 * n - 1)\<close> dvd_add
-        group_cancel.add1)
+  then have "11 dvd (x * (1 + 10 ^ (2 * n + 1)::nat))" by fastforce
+  then show "11 dvd (x + x * (10 ^ (2 * n + 1)::nat))" by simp
 qed
 
 lemma sum10_pall_div11:
@@ -238,7 +232,7 @@ next
     using sum10_pall.simps(2) by blast
   then have "11 dvd ?sum10_pall_tail"
     using Cons.hyps Cons.prems dvd_mult by blast
-  then have "\<forall> n ::nat. 11 dvd (x + x * (10 ^ (2 * n - 1)::nat))" sorry
+  then have "\<forall> n ::nat. 11 dvd (x + x * (10 ^ (2 * n + 1)::nat))" using dvd11 by simp
   then show ?case
     by (metis (no_types, lifting) \<open>11 dvd 10 * sum10_pall xs\<close>
         \<open>\<exists>n. sum10_pall (x # xs) = 10 * sum10_pall xs + x + x * 10 ^ (2 * n - 1)\<close> dvd_add
