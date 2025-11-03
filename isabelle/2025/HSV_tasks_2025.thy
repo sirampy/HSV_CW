@@ -466,8 +466,18 @@ qed
 
 text \<open> The reduce function never decreases the number of clauses in a query. \<close>
 lemma reduce_min_extension:
-  "length (reduce x (q # qs)) \<ge> 1 + length (reduce (x + 1) qs)" 
-  sorry
+  "\<exists>x'::nat. length (reduce x (q # qs)) \<ge> 1 + length (reduce x' qs)"
+proof -
+  let ?x' = "fst (reduce_clause x q)"
+  have "length (reduce x (q # qs)) =
+          length (snd (reduce_clause x q)) + length (reduce ?x' qs)"
+    by (simp add: Let_def split_def)
+  also have "... \<ge> 1 + length (reduce ?x' qs)"
+    using reduce_clause_length_nondecreasing by auto
+  finally have "length (reduce x (q # qs)) \<ge> 1 + length (reduce ?x' qs)" .
+  thus ?thesis
+    by (rule exI[of _ ?x'])
+qed
 
 theorem "length q \<le> length (reduce x q)"
 proof (induct x q rule: reduce.induct)

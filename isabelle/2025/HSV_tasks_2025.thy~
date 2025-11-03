@@ -465,61 +465,9 @@ next
 qed
 
 text \<open> The reduce function never decreases the number of clauses in a query. \<close>
-
-(*
-theorem "length q \<le> length (reduce x q)"
-proof (induct q)
-  case Nil
-  then show ?case by simp
-next
-  case (Cons d ds)
-  value "?case"
-  then have "length ds \<le> length (reduce x' ds)"
-    try
-  then have "reduce x (d # ds) = 
-    (let (x', cs) = reduce_clause x d in cs @ reduce x' ds)"
-    by simp
-  then have "reduce x (d # ds) = 
-    (snd (reduce_clause x d)) @ 
-    reduce (fst (reduce_clause x d)) ds"
-    by (simp add: Let_def split_def)
-  then have literal_equivalence: "length (reduce x (d # ds)) = 
-    length ((snd (reduce_clause x d)) @ 
-    reduce (fst (reduce_clause x d)) ds)"
-    by simp
-  then have length_concat_rule: "\<forall> aa ab ::'a list. length (aa @ ab) = length aa + length ab"
-    by simp
-  then have "length (reduce x (d # ds)) =
-    length (snd (reduce_clause x d)) + 
-    length (reduce (fst (reduce_clause x d)) ds)"
-    using literal_equivalence length_concat_rule by simp
-  then have min_length_rule: "length (reduce x (d # ds)) \<ge>
-    1 + 
-    length (reduce (fst (reduce_clause x d)) ds)"
-    using reduce_clause_length_nondecreasing by auto
-  then have x_and_length_independant :
-    "length (reduce (fst (reduce_clause x d)) ds) =
-    length (reduce x' ds)"
-    sorry
-  then have min_length_rule: "length (reduce x (d # ds)) \<ge>
-    1 + 
-    length (reduce x' ds)"
-    using x_and_length_independant min_length_rule by simp
-  then have "length ds \<le> length (reduce x' ds)" 
-
-  then have "length (reduce (fst (reduce_clause x d)) ds)
-    \<ge> length ds"
-
-  then have "(length ds) + 1 \<le>
-    length (reduce x (d # ds))"
-    sorry
-  
-  then show ?case    
-qed
-*)
 lemma reduce_min_extension:
   "length (reduce x (q # qs)) \<ge> 1 + length (reduce (x + 1) qs)" 
-  oops
+  sorry
 
 theorem "length q \<le> length (reduce x q)"
 proof (induct x q rule: reduce.induct)
@@ -557,10 +505,11 @@ next
     by simp
   then have min_length_rule: "length (d # ds) \<le>
     length (reduce x (d # ds))"
-  then have min_length_rule: "length (reduce x (d # ds)) \<ge>
-    length ds"
-  
-  then show ?case   
+    using
+      \<open>length (reduce x (d # ds)) = length (snd (reduce_clause x d)) + length (reduce (fst (reduce_clause x d)) ds)\<close>
+      add_le_mono1 le_trans reduce_clause_length_nondecreasing
+    by presburger
+  then show ?case by simp   
 qed
 
 definition "satisfiable q \<equiv> \<exists>\<rho>. evaluate q \<rho>"
