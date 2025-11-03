@@ -232,7 +232,7 @@ next
     using sum10_pall.simps(2) by blast
   then have "11 dvd ?sum10_pall_tail"
     using Cons.hyps Cons.prems dvd_mult by blast
-  then have "\<forall> n ::nat. 11 dvd (x + x * (10 ^ (2 * n + 1)::nat))" using dvd11 by simp
+  then have "\<forall> n ::nat. 11 dvd (x + x * (10 ^ (2 * n + 1)::nat))" using dvd11_prim by simp
   then show ?case
     by (metis (no_types, lifting) \<open>11 dvd 10 * sum10_pall xs\<close>
         \<open>\<exists>n. sum10_pall (x # xs) = 10 * sum10_pall xs + x + x * 10 ^ (2 * n - 1)\<close> dvd_add
@@ -358,9 +358,64 @@ where
 
 
 text \<open> The reduce function really does return queries in 3SAT form. \<close>
+
+thm reduce_clause.induct
+
+lemma is_3SAT_reduce_clause:
+  "\<forall>c \<in> set (snd (reduce_clause x clause)). length c \<le> 3"
+proof (induct x clause rule: reduce_clause.induct)
+  case (1 x l1 l2 l3 l4 c)
+  value "?case"
+  then have "reduce_clause x (l1 # l2 # l3 # l4 # c) = 
+  (let (x',cs) = reduce_clause (x+1) ((x, False) # l3 # l4 # c) in
+  (x', [[(x, True), l1, l2]] @ cs))" by simp
+  then have "length [(x, True), l1, l2] \<le> 3" by simp
+  then have "let (x',cs) = reduce_clause (x+1) ((x, False) # l3 # l4 # c) in
+    \<forall>cl \<in> set ([[(x, True), l1, l2]] @ cs) .
+    length cl \<le> 3" by (simp add: "1" case_prodI2)
+  then show ?case 
+    by auto
+next
+  case ("2_1" x)
+  then show ?case by simp
+next
+  case ("2_2" x v)
+  then show ?case by simp
+next
+  case ("2_3" x v vb)
+  then show ?case by simp
+next
+  case ("2_4" x v vb vd)
+  then show ?case by simp
+qed
+
+
 theorem is_3SAT_reduce:
   "is_3SAT (reduce x q)" 
-  oops
+proof (induct x q rule: reduce.induct)
+  case (1 uu)
+  then show ?case
+    by simp
+next
+  case (2 x c q)
+  value "?case"
+  then have "reduce x (c # q) = (let (x',cs) = reduce_clause x c in cs @ reduce x' q)" by simp
+  then have "let cs = snd (reduce_clause x c) in 
+    (\<forall> clause \<in> set cs.
+    length clause \<le> 3) " 
+    using is_3SAT_reduce_clause by presburger
+  then have "let (x', cs) =  reduce_clause x c in 
+    (\<forall> clause \<in> set cs.
+    length clause \<le> 3) " 
+    by auto
+  then have "let (x', cs) =  reduce_clause x c in ( 
+    let tail = reduce x' q in (
+      \<forall> clause \<in> set tail.
+      length clause \<le> 3
+     )
+  )" using "2" by fastforce 
+  then show ?case try  
+qed
 
 
 text \<open> The reduce function never decreases the number of clauses in a query. \<close>

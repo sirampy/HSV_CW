@@ -358,9 +358,79 @@ where
 
 
 text \<open> The reduce function really does return queries in 3SAT form. \<close>
+
+thm reduce_clause.induct
+
+lemma is_3SAT_reduce_clause:
+  "\<forall>c \<in> set (snd (reduce_clause x clause)). length c \<le> 3"
+proof (induct x clause rule: reduce_clause.induct)
+  case (1 x l1 l2 l3 l4 c)
+  value "?case"
+  then have "reduce_clause x (l1 # l2 # l3 # l4 # c) = 
+  (let (x',cs) = reduce_clause (x+1) ((x, False) # l3 # l4 # c) in
+  (x', [[(x, True), l1, l2]] @ cs))" by simp
+  then have "length [(x, True), l1, l2] \<le> 3" by simp
+  then have "let (x',cs) = reduce_clause (x+1) ((x, False) # l3 # l4 # c) in
+    \<forall>cl \<in> set ([[(x, True), l1, l2]] @ cs) .
+    length cl \<le> 3" by (simp add: "1" case_prodI2)
+  then show ?case 
+    by auto
+next
+  case ("2_1" x)
+  then show ?case by simp
+next
+  case ("2_2" x v)
+  then show ?case by simp
+next
+  case ("2_3" x v vb)
+  then show ?case by simp
+next
+  case ("2_4" x v vb vd)
+  then show ?case by simp
+qed
+
+
 theorem is_3SAT_reduce:
   "is_3SAT (reduce x q)" 
-  oops
+proof (induct x q rule: reduce.induct)
+  case (1 uu)
+  then show ?case
+    by simp
+next
+  case (2 x c q)
+  value "?case"
+  then have "reduce x (c # q) = (let (x',cs) = reduce_clause x c in cs @ reduce x' q)" by simp
+  then have "let cs = snd (reduce_clause x c) in 
+    (\<forall> clause \<in> set cs.
+    length clause \<le> 3) " 
+    using is_3SAT_reduce_clause by presburger
+  then have term1:"let (x', cs) =  reduce_clause x c in 
+    (\<forall> clause \<in> set cs.
+    length clause \<le> 3) " 
+    by auto
+  then have term2: "let (x', cs) =  reduce_clause x c in ( 
+    let tail = reduce x' q in (
+      \<forall> clause \<in> set tail.
+      length clause \<le> 3
+     )
+  )" using "2" by fastforce 
+  then have "let (x', cs) =  reduce_clause x c in ( 
+    let tail = reduce x' q in (
+      (\<forall> clause \<in> set tail.
+      length clause \<le> 3)
+      \<and>
+      (\<forall> clause \<in> set cs.
+      length clause \<le> 3)
+     )
+  )" using term1 term2 by auto 
+  then have term2: "let (x', cs) =  reduce_clause x c in ( 
+    let tail = reduce x' q in (
+      \<forall> clause \<in> set (cs @ tail).
+      length clause \<le> 3
+     )
+  )" by auto 
+  then show ?case by auto 
+qed
 
 
 text \<open> The reduce function never decreases the number of clauses in a query. \<close>
