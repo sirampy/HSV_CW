@@ -257,10 +257,9 @@ proof -
     by (metis \<open>pallindrome (take (length ds div 2) ds) = ds\<close> sum10_pall_div11)
 qed
 
-
 section \<open> Task 3: 3SAT reduction. \<close>
 
-text \<open> We shall use integers to represent ymbols. \<close>
+text \<open> We shall use integers to represent smbols. \<close>
 type_synonym symbol = "nat"
 
 text \<open> A literal is either a symbol or a negated symbol. \<close>
@@ -357,7 +356,6 @@ where
   "symbols q \<equiv> \<Union> (set (map symbols_clause q))"
 
 
-text \<open> The reduce function really does return queries in 3SAT form. \<close>
 
 thm reduce_clause.induct
 
@@ -389,7 +387,7 @@ next
   then show ?case by simp
 qed
 
-
+text \<open> The reduce function really does return queries in 3SAT form. \<close>
 theorem is_3SAT_reduce:
   "is_3SAT (reduce x q)" 
 proof (induct x q rule: reduce.induct)
@@ -432,10 +430,87 @@ next
   then show ?case by auto 
 qed
 
+text \<open> Task 3 Part 2 / 4 \<close>
+lemma reduce_clause_length_nondecreasing:
+  "length (snd (reduce_clause x clause)) \<ge> 1"
+proof (induct x clause rule: reduce_clause.induct)
+  case (1 x l1 l2 l3 l4 c)
+  value "?case"
+  then have literal_form: "
+    (let (x',cs) = reduce_clause (x+1) ((x, False) # l3 # l4 # c) in
+    reduce_clause x (l1 # l2 # l3 # l4 # c) = 
+    (x', [[(x, True), l1, l2]] @ cs))" by auto
+  then have literal_equivalence: "length (snd (reduce_clause x (l1 # l2 # l3 # l4 # c))) = 
+    length (snd (let (x',cs) = reduce_clause (x+1) ((x, False) # l3 # l4 # c) in
+    (x', [[(x, True), l1, l2]] @ cs)))" by simp
+  then have literal_proof:
+    "let (x', cs) = reduce_clause (x + 1) ((x, False) # l3 # l4 # c)
+     in length (snd (x', [[(x, True), l1, l2]] @ cs)) \<ge> 1"
+    by simp
+  then have "length (snd (reduce_clause x (l1 # l2 # l3 # l4 # c))) \<ge> 1" 
+    using literal_form literal_proof by auto 
+  then show ?case by simp 
+next
+  case ("2_1" x)
+  then show ?case by simp
+next
+  case ("2_2" x v)
+  then show ?case by simp
+next
+  case ("2_3" x v vb)
+  then show ?case by simp
+next
+  case ("2_4" x v vb vd)
+  then show ?case by simp
+qed
 
 text \<open> The reduce function never decreases the number of clauses in a query. \<close>
+lemma reduce_min_extension:
+  "length (reduce x (q # qs)) \<ge> 1 + length (reduce (x + 1) qs)" 
+  sorry
+
 theorem "length q \<le> length (reduce x q)"
-  oops
+proof (induct x q rule: reduce.induct)
+  case (1 uu)
+  value "?case"
+  then show ?case by simp
+next
+  case (2 x d ds)
+  value "?case"
+  then have "reduce x (d # ds) = 
+    (let (x', cs) = reduce_clause x d in cs @ reduce x' ds)"
+    by simp
+  then have "reduce x (d # ds) = 
+    (snd (reduce_clause x d)) @ reduce (fst (reduce_clause x d)) ds"
+    by (simp add: Let_def split_def)
+  then have literal_equivalence: "length (reduce x (d # ds)) = 
+    length ((snd (reduce_clause x d)) @ reduce (fst (reduce_clause x d)) ds)"
+    by simp
+  then have length_concat_rule: "\<forall> aa ab ::'a list. length (aa @ ab) = length aa + length ab"
+    by simp
+  then have "length (reduce x (d # ds)) =
+    length (snd (reduce_clause x d)) + 
+    length (reduce (fst (reduce_clause x d)) ds)"
+    using literal_equivalence length_concat_rule by simp
+  then have min_length_rule: "length (reduce x (d # ds)) \<ge>
+    1 + 
+    length (reduce (fst (reduce_clause x d)) ds)"
+    using reduce_clause_length_nondecreasing by auto
+  then have "length (reduce (fst (reduce_clause x d)) ds)
+    \<ge> length ds"
+    by (metis "2" surjective_pairing)
+  then have min_length_rule: "length (d # ds) \<le>
+    1 + 
+    length (reduce (fst (reduce_clause x d)) ds)"
+    by simp
+  then have min_length_rule: "length (d # ds) \<le>
+    length (reduce x (d # ds))"
+    using
+      \<open>length (reduce x (d # ds)) = length (snd (reduce_clause x d)) + length (reduce (fst (reduce_clause x d)) ds)\<close>
+      add_le_mono1 le_trans reduce_clause_length_nondecreasing
+    by presburger
+  then show ?case by simp   
+qed
 
 definition "satisfiable q \<equiv> \<exists>\<rho>. evaluate q \<rho>"
 
