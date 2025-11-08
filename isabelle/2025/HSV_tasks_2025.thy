@@ -600,6 +600,32 @@ next
     then show ?case by simp
 qed
 
+lemma reduce_preserves_clauses:
+  "clause \<in> set q \<Longrightarrow> \<exists>x'. set (snd (reduce_clause x' clause)) \<subseteq> set (reduce x q)"
+proof (induct q arbitrary: x)
+  case Nil
+  then show ?case by simp
+next
+  case (Cons c q')
+  then show ?case
+  proof (cases "clause = c")
+    case True
+    then have "reduce x (c # q') = (let (x', cs) = reduce_clause x c in cs @ reduce x' q')"
+      by simp
+    then have "set (snd (reduce_clause x c)) \<subseteq> set (reduce x (c # q'))"
+      by (auto simp: Let_def split_def)
+    then show ?thesis using True by blast
+  next
+    case False
+    then have "clause \<in> set q'" using Cons.prems by simp
+    then obtain x'' where "set (snd (reduce_clause x'' clause)) \<subseteq> set (reduce (fst (reduce_clause x c)) q')"
+      using Cons.hyps by blast
+    moreover have "set (reduce (fst (reduce_clause x c)) q') \<subseteq> set (reduce x (c # q'))"
+      by (auto simp: Let_def split_def)
+    ultimately show ?thesis by blast
+  qed
+qed
+
 text \<open> If reduce x q is satisfiable, then so is q. \<close>
 
 theorem sat_reduce1:
@@ -613,7 +639,8 @@ proof -
   have "\<forall> clause \<in> set (reduce x q). evaluate [clause] valuation"
     using eval_reduce evaluate_def by auto
   then have "\<forall>clause \<in> (set q). \<exists> x'. set (reduce x' [clause]) \<subseteq> set (reduce x q)"
-    sorry
+    by (simp add: case_prod_unfold reduce_preserves_clauses)
+    
   then have "\<forall>clause \<in> (set q). \<exists> x'. \<forall> reduced_clause \<in> set (reduce x' [clause]). evaluate [reduced_clause] valuation"
     by (meson \<open>\<forall>clause\<in>set (reduce x q). evaluate [clause] valuation\<close> in_mono)
   then have "\<forall>clause \<in> (set q). \<exists> x'. \<forall> reduced_clause \<in> set (snd (reduce_clause x' clause)). evaluate [reduced_clause] valuation"
