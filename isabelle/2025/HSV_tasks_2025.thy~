@@ -227,16 +227,19 @@ proof (induct ds)
   then show ?case by simp
 next
   case (Cons x xs)
-  let ?sum10_pall_tail = "10 * sum10_pall xs"
-  have "\<exists> n ::nat. sum10_pall (x # xs) = ?sum10_pall_tail + x + x * (10 ^ (2 * n - 1))" 
-    using sum10_pall.simps(2) by blast
-  then have "11 dvd ?sum10_pall_tail"
-    using Cons.hyps Cons.prems dvd_mult by blast
-  then have "\<forall> n ::nat. 11 dvd (x + x * (10 ^ (2 * n + 1)::nat))" using dvd11_prim by simp
-  then show ?case
-    by (metis (no_types, lifting) \<open>11 dvd 10 * sum10_pall xs\<close>
-        \<open>\<exists>n. sum10_pall (x # xs) = 10 * sum10_pall xs + x + x * 10 ^ (2 * n - 1)\<close> dvd_add
-        group_cancel.add1)
+  have "sum10_pall (x # xs) = 10 * sum10_pall xs + x + x * (10 ^ (2 * length (x # xs) - 1))" 
+    by simp
+  also have "... = 10 * sum10_pall xs + (x + x * (10 ^ (2 * length xs + 1)))"
+    by simp
+  finally have expand: "sum10_pall (x # xs) = 10 * sum10_pall xs + (x + x * (10 ^ (2 * length xs + 1)))" .
+  
+  have "11 dvd (10 * sum10_pall xs)" 
+    using Cons.hyps by simp
+  moreover have "11 dvd (x + x * (10 ^ (2 * length xs + 1)))"
+    using dvd11_prim by simp
+  ultimately have "11 dvd (10 * sum10_pall xs + (x + x * (10 ^ (2 * length xs + 1))))"
+    by simp
+  thus ?case using expand by metis
 qed
 
 value "Suc 0"
@@ -466,8 +469,18 @@ qed
 
 text \<open> The reduce function never decreases the number of clauses in a query. \<close>
 lemma reduce_min_extension:
-  "length (reduce x (q # qs)) \<ge> 1 + length (reduce (x + 1) qs)" 
-  sorry
+  "\<exists>x'::nat. length (reduce x (q # qs)) \<ge> 1 + length (reduce x' qs)"
+proof -
+  let ?x' = "fst (reduce_clause x q)"
+  have "length (reduce x (q # qs)) =
+          length (snd (reduce_clause x q)) + length (reduce ?x' qs)"
+    by (simp add: Let_def split_def)
+  also have "... \<ge> 1 + length (reduce ?x' qs)"
+    using reduce_clause_length_nondecreasing by auto
+  finally have "length (reduce x (q # qs)) \<ge> 1 + length (reduce ?x' qs)" .
+  thus ?thesis
+    by (rule exI[of _ ?x'])
+qed
 
 theorem "length q \<le> length (reduce x q)"
 proof (induct x q rule: reduce.induct)
@@ -514,11 +527,244 @@ qed
 
 definition "satisfiable q \<equiv> \<exists>\<rho>. evaluate q \<rho>"
 
+text \<open> Task 3 Part 3 / 4 \<close>
+
+lemma evluate_reduce_clause_implies_evaluate:
+  "evaluate (snd (reduce_clause x c)) valuation \<Longrightarrow> evaluate [c] valuation"
+proof (induct x c rule: reduce_clause.induct)
+  case (1 x l1 l2 l3 l4 c)
+  obtain x' cs where red_eq: "(x', cs) = reduce_clause (x+1) ((x,False) # l3 # l4 # c)" 
+    using prod.collapse by blast
+
+  have reduce_eq: "reduce_clause x (l1 # l2 # l3 # l4 # c) = (x', [[(x, True), l1, l2]] @ cs)" 
+      by (metis case_prod_conv red_eq reduce_clause.simps(1))
+  then have "evaluate ([[(x, True), l1, l2]] @ cs) valuation"
+    using \<open>evaluate (snd (reduce_clause x (l1 # l2 # l3 # l4 # c))) valuation\<close> by auto
+
+  (* Handle first half *)
+  then have first_half_evaluation: "evaluate_clause valuation [(x, True), l1, l2]"
+    using \<open>evaluate (snd (reduce_clause x (l1 # l2 # l3 # l4 # c))) valuation\<close> evaluate_def by auto
+  then have "\<exists>l \<in> set[(x, True), l1, l2]. evaluate_literal valuation l "
+    using evaluate_clause_def by blast
+  then have "evaluate_literal valuation (x, True) \<or> evaluate_literal valuation l1 \<or> evaluate_literal valuation l2"
+    by simp
+  then have "evaluate [l1 # l2 # []] valuation \<or> evaluate_literal valuation (x, True)"
+    using evaluate_clause_def evaluate_def by auto
+
+  thm "1"
+
+  (* Handle second half *)
+  then have "cs = snd (reduce_clause (x+1) ((x, False) # l3 # l4 # c))"
+    by (metis red_eq snd_eqD)
+  then have second_half_satisfies: "evaluate [(x, False) # l3 # l4 # c] valuation"
+    using "1.hyps" \<open>evaluate ([[(x, True), l1, l2]] @ cs) valuation\<close> evaluate_def satisfiable_def by auto  
+  then have "evaluate_literal valuation (x, False)
+    \<or> evaluate_literal valuation l3 \<or> evaluate_literal valuation l4
+    \<or> evaluate_clause valuation c"
+    by (simp add: evaluate_clause_def evaluate_def)
+  then have "evaluate [l3 # l4 # c] valuation \<or> evaluate_literal valuation (x, False)"
+    using evaluate_clause_def evaluate_def by auto
+
+  (* Combine halves *)
+  then have "(evaluate [l3 # l4 # c] valuation \<or> evaluate_literal valuation (x, False))
+    \<and> (evaluate [l1 # l2 # []] valuation \<or> evaluate_literal valuation (x, True))"
+    using \<open>evaluate [[l1, l2]] valuation \<or> evaluate_literal valuation (x, True)\<close> by force
+  then have "(evaluate [l3 # l4 # c] valuation)
+    \<or> (evaluate [l1 # l2 # []] valuation)"
+    by auto
+  then have one_component_must_satisfy:
+    "evaluate_literal valuation l1 \<or> evaluate_literal valuation l2
+    \<or> evaluate_literal valuation l3 \<or> evaluate_literal valuation l4
+    \<or> evaluate_clause valuation c"
+    using
+      \<open>evaluate_literal valuation (x, False) \<or> evaluate_literal valuation l3 \<or> evaluate_literal valuation l4 \<or> evaluate_clause valuation c\<close>
+      \<open>evaluate_literal valuation (x, True) \<or> evaluate_literal valuation l1 \<or> evaluate_literal valuation l2\<close> by auto
+  then have clause_satisfies: "evaluate_clause valuation (l1 # l2 # l3 # l4 # c)"
+    using one_component_must_satisfy by (simp add: evaluate_clause_def)
+  then have "evaluate [l1 # l2 # l3 # l4 # c] valuation" 
+    using clause_satisfies
+    by (simp add: evaluate_def)
+
+  then show ?case by simp
+next
+  case ("2_1" x)
+  then show ?case by simp
+next
+  case ("2_2" x v)
+  then show ?case by simp
+next
+  case ("2_3" x v vb)
+  then show ?case by simp
+next
+    case ("2_4" x v vb vd)
+    then show ?case by simp
+qed
+
 text \<open> If reduce x q is satisfiable, then so is q. \<close>
+
 theorem sat_reduce1:
   assumes "satisfiable (reduce x q)"
   shows "satisfiable q"
-  sorry
+proof -
+  from assms obtain valuation where eval_reduce: "evaluate (reduce x q) valuation"
+    unfolding satisfiable_def by auto
+
+  have "\<forall> clause \<in> set (reduce x q). evaluate [clause] valuation"
+    using eval_reduce evaluate_def by auto
+  then have "\<forall> clause \<in> set q. evaluate_clause valuation clause"
+    proof (induction x q rule: reduce.induct)
+      case (1 uu)
+      then show ?case by simp
+    next
+      case (2 x c q)
+      thm "2"
+      value ?case
+      
+      have "evaluate (snd (reduce_clause x c)) valuation"
+        try
+      have "evaluate [c] valuation"
+        try
+      
+      then show ?case 
+    qed  
+
+  hence ?thesis try
+    using evaluate_def satisfiable_def by blast
+qed
+
+(*
+theorem sat_reduce1:
+  assumes "satisfiable (reduce x q)"
+  shows "satisfiable q"
+proof -
+  from assms obtain valuation where eval_reduce: "evaluate (reduce x q) valuation"
+    unfolding satisfiable_def by auto
+  have "reduce some_x (d # ds) = (let (x',cs) = reduce_clause some_x d in cs @ reduce x' ds)"
+    by simp
+
+  hence ?thesis proof (induct q)
+    case Nil
+    then have "evaluate [] \<rho>" unfolding evaluate_def by simp
+    then show ?case unfolding satisfiable_def by auto
+  next
+    case (Cons c cs)
+    have "reduce x (c # cs) = 
+      (let (x', cs') = reduce_clause x c in cs' @ reduce x' cs)"
+      by simp
+    value "q" 
+    then have "satisfiable (reduce x' [c])" 
+    then have "evaluate (reduce (c # cs) valuation)" try 
+    thus ?case sorry
+  qed
+qed
+
+  assumes "satisfiable (reduce x q)"
+  shows "satisfiable q"
+proof (induct x q rule: reduce.induct)
+  case (1 uu)
+  then show ?case 
+    by (simp add: evaluate_def satisfiable_def)
+next
+  case (2 x c q)
+  value "?case"
+  then have "satisfiable (reduce x (c # q))" try
+  then have "reduce x' (d # ds) = 
+    (snd (reduce_clause x' d)) @ reduce (fst (reduce_clause x' d)) ds"
+    by (simp add: Let_def split_def)
+  then have "satisfiable (reduce x' (d # ds)) = 
+    satisfiable ((snd (reduce_clause x' d)) @ reduce (fst (reduce_clause x' d)) ds)"
+    by simp
+  then have "satisfiable (reduce x (c # q)) = 
+    satisfiable ((snd (reduce_clause x c)) @ reduce (fst (reduce_clause x c)) q)"
+  by (simp add: Let_def split_def)lemma satisfiable_reduce_clause_implies_satisfiable:
+  "satisfiable (snd (reduce_clause x c)) \<Longrightarrow> satisfiable [c]"
+proof (induct x c rule: reduce_clause.induct)
+case (1 x l1 l2 l3 l4 c)
+  
+  obtain x' cs where red_eq: "(x', cs) = reduce_clause (x+1) ((x,False) # l3 # l4 # c)" 
+    using prod.collapse by blast
+  obtain valuation where "evaluate (snd (reduce_clause x (l1 # l2 # l3 # l4 # c))) valuation "
+    using "1.prems" satisfiable_def by blast
+
+  have reduce_eq: "reduce_clause x (l1 # l2 # l3 # l4 # c) = (x', [[(x, True), l1, l2]] @ cs)" 
+      by (metis case_prod_conv red_eq reduce_clause.simps(1))
+  then have "evaluate ([[(x, True), l1, l2]] @ cs) valuation"
+    using \<open>evaluate (snd (reduce_clause x (l1 # l2 # l3 # l4 # c))) valuation\<close> by auto
+
+
+  (* Handle first half *)
+  then have first_half_evaluation: "evaluate_clause valuation [(x, True), l1, l2]"
+    using \<open>evaluate (snd (reduce_clause x (l1 # l2 # l3 # l4 # c))) valuation\<close> evaluate_def by auto
+  then have "\<exists>l \<in> set[(x, True), l1, l2]. evaluate_literal valuation l "
+    using evaluate_clause_def by blast
+  then have "evaluate_literal valuation (x, True) \<or> evaluate_literal valuation l1 \<or> evaluate_literal valuation l2"
+    by simp
+  then have "\<exists> valuation2. evaluate_literal valuation2 (x, True) \<or> evaluate_literal valuation2 l1 \<or> evaluate_literal valuation2 l2"
+    by blast
+
+  (* Infer first half from second *)
+  then have "cs = snd (reduce_clause (x+1) ((x, False) # l3 # l4 # c))"
+    by (metis red_eq snd_eqD)
+  then have second_half_satisfies: "satisfiable [(x, False) # l3 # l4 # c]"
+    using "1.hyps" \<open>evaluate ([[(x, True), l1, l2]] @ cs) valuation\<close> evaluate_def satisfiable_def by auto
+  then have second_half_satisfies: "satisfiable [((x, False) # l3 # l4 # c) # [(x, True), l1, l2]]"
+    using "1.hyps" \<open>evaluate ([[(x, True), l1, l2]] @ cs) valuation\<close> evaluate_def satisfiable_def by auto
+
+  (* Handle second half *)
+  thm "1"
+
+  then have "\<exists> valuation2. evaluate [(x, False) # l3 # l4 # c] valuation2"
+    using satisfiable_def by blast
+  then have "\<exists> valuation2. evaluate_clause valuation2 ((x, False) # l3 # l4 # c)"
+    by (simp add: evaluate_def)
+  then have "\<exists> valuation2. evaluate_literal valuation2 (x, False)
+    \<or> evaluate_literal valuation2 l3 \<or> evaluate_literal valuation2 l4
+    \<or> evaluate_clause valuation2 c"
+    by auto
+
+  (* Combine halves *)  
+  then have "\<exists> valuation2. 
+    evaluate_literal valuation2 (x, True) \<or> evaluate_literal valuation2 l1 \<or> evaluate_literal valuation2 l2
+    \<or> evaluate_literal valuation2 (x, False) \<or> evaluate_literal valuation2 l3 \<or> evaluate_literal valuation2 l4
+    \<or> evaluate_clause valuation2 c"
+    by auto
+  then have "\<exists> valuation2. evaluate_literal valuation2 (x, False)
+    \<or> evaluate_literal valuation2 l3 \<or> evaluate_literal valuation2 l4
+    \<or> evaluate_clause valuation2 c"
+    by auto
+
+
+  then have "\<exists>l \<in> set[(x, False) # l3 # l4 # c]. evaluate_literal valuation l "
+    try
+  
+
+  (* Get satisifability of both relevant queries*)
+  then have "evaluate_literal evaluation (x,True) \<or> evaluate_literal evaluation l1 \<or> evaluate_literal evaluation l2" 
+    try
+  
+  (* Now show original clause is satisfiable *)
+  then show ?case
+    sorry (* Need to show: satisfiable [[(x, False), l3, l4] @ c] \<Longrightarrow> satisfiable [[l1, l2, l3, l4] @ c] *)
+  then show ?case 
+next
+  case ("2_1" x)
+  then show ?case by (simp add: satisfiable_def evaluate_def)
+next
+  case ("2_2" x v)
+  then show ?case by (simp add: satisfiable_def evaluate_def)
+next
+  case ("2_3" x v vb)
+  then show ?case by (simp add: satisfiable_def evaluate_def)
+next
+  case ("2_4" x v vb vd)
+  then show ?case by (simp add: satisfiable_def evaluate_def)
+qed
+
+  then have 
+    
+  then show ?case 
+qed
+*)
 
 text \<open> If q is satisfiable, and all the symbols in q are below x, 
   then reduce x q is also satisfiable. \<close>
