@@ -668,18 +668,117 @@ lemma all_below_single_clause:
 
 lemma reduce_clause_preserves_bound:
   "fst (reduce_clause x clause) \<ge> x"
-  sorry
+proof (induct x clause rule: reduce_clause.induct)
+  case (1 x l1 l2 l3 l4 c)
+  thm 1
+  value ?case
+  have "reduce_clause x (l1 # l2 # l3 # l4 # c) = 
+    (let (x',cs) = reduce_clause (x+1) ((x, False) # l3 # l4 # c) in
+    (x', [[(x, True), l1, l2]] @ cs))"
+    by simp
+  have "x \<le> fst (reduce_clause x (l1 # l2 # l3 # l4 # c))"
+    by (metis (no_types, lifting) "1"
+        \<open>reduce_clause x (l1 # l2 # l3 # l4 # c) = (let (x', cs) = reduce_clause (x + 1) ((x, False) # l3 # l4 # c) in (x', [[(x, True), l1, l2]] @ cs))\<close>
+        add_leD1 case_prod_unfold split_pairs)
+  then show ?case by simp
+next
+  case ("2_1" x)
+  then show ?case by simp
+next
+  case ("2_2" x v)
+  then show ?case by simp
+next
+  case ("2_3" x v vb)
+  then show ?case by simp
+next
+  case ("2_4" x v vb vd)
+  then show ?case by simp
+qed
 
 lemma all_below_monotone:
   assumes "y \<ge> x" and "x \<triangleright> q"
   shows "y \<triangleright> q"
-  sorry
+proof -
+  value ?thesis
+  have "\<forall> clause \<in> set q. \<forall> (y,_) \<in> set clause.  y < x" 
+    using all_below_def assms(2) by presburger
+  then have "\<forall> clause \<in> set q. \<forall> (term,_) \<in> set clause.  term < y" 
+    using assms(1) by fastforce
+  thus ?thesis 
+    by simp
+qed
 
 lemma reduce_maintains_bounds:
   assumes "x \<triangleright> q"
   shows "\<forall>clause \<in> set q. \<exists>x'. x \<le> x' \<and> x' \<triangleright> [clause] \<and> 
          set (snd (reduce_clause x' clause)) \<subseteq> set (reduce x q)"
-  sorry
+  using assms
+proof (induction q arbitrary: x)
+  case Nil
+  then show ?case by simp
+next
+  case (Cons c q)
+  (* From x \<triangleright> (c # q), we know x \<triangleright> [c] and x \<triangleright> q *)
+  have x_above_c: "x \<triangleright> [c]" using Cons.prems by simp
+  have x_above_q: "\<forall>clause \<in> set q. \<forall>(y,_) \<in> set clause. y < x" 
+    using Cons.prems by simp
+  
+  (* Unfold reduce_clause *)
+  obtain x' cs where reduce_c: "reduce_clause x c = (x', cs)"
+    by (metis surj_pair)
+  
+  (* reduce x (c # q) = cs @ reduce x' q *)
+  have reduce_unfold: "reduce x (c # q) = cs @ reduce x' q"
+    using reduce_c by (simp add: Let_def)
+  
+  (* Need to show: for every clause in (c # q), the property holds *)
+  show ?case
+  proof (intro ballI)
+    fix clause
+    assume "clause \<in> set (c # q)"
+    
+    then consider (head) "clause = c" | (tail) "clause \<in> set q" 
+      by auto
+    
+    then show "\<exists>x''. x \<le> x'' \<and> x'' \<triangleright> [clause] \<and> 
+               set (snd (reduce_clause x'' clause)) \<subseteq> set (reduce x (c # q))"
+    proof cases
+      case head
+      (* When clause = c, use x' = x *)
+      have "set cs \<subseteq> set (reduce x (c # q))"
+        using reduce_unfold by auto
+      moreover have "snd (reduce_clause x c) = cs"
+        using reduce_c by simp
+      ultimately show ?thesis
+        using head x_above_c by (metis order_refl)
+    next
+      case tail
+      (* When clause \<in> q, we need x' \<triangleright> q to apply IH *)
+      (* First, need a lemma that reduce_clause increases x *)
+      have "x \<le> x'" 
+        by (metis fst_conv reduce_c reduce_clause_preserves_bound)
+      
+      hence "x' \<triangleright> q"
+        using x_above_q by fastforce
+      
+      (* Apply induction hypothesis *)
+      then obtain x'' where IH: "x' \<le> x'' \<and> x'' \<triangleright> [clause] \<and> 
+                                 set (snd (reduce_clause x'' clause)) \<subseteq> set (reduce x' q)"
+        using Cons.IH tail by blast
+      
+      (* Combine results *)
+      have "set (reduce x' q) \<subseteq> set (reduce x (c # q))"
+        using reduce_unfold by auto
+      
+      with IH have "set (snd (reduce_clause x'' clause)) \<subseteq> set (reduce x (c # q))"
+        by blast
+      
+      moreover have "x \<le> x''" using `x \<le> x'` IH by simp
+      
+      ultimately show ?thesis using IH by blast
+    qed
+  qed
+qed
 
 text \<open> If q is satisfiable, and all the symbols in q are below x, 
   then reduce x q is also satisfiable. \<close>

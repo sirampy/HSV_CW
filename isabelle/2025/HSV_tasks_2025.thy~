@@ -654,33 +654,126 @@ proof -
     using evaluate_def satisfiable_def by auto
 qed
 
-text \<open> Task 3 Part 3 / 4 \<close>
+text \<open> Task 3 Part 4 / 4 \<close>
 
 theorem sat_implies_reduced_sat:
   assumes "evaluate_clause valuation c" and "x \<triangleright> [c]"
   shows "evaluate (snd (reduce_clause x c)) valuation"
   sorry
 
+lemma all_below_single_clause:
+  assumes "x \<triangleright> q" and "clause \<in> set q"
+  shows "x \<triangleright> [clause]"
+  using assms by auto
+
+lemma reduce_clause_preserves_bound:
+  "fst (reduce_clause x clause) \<ge> x"
+proof (induct x clause rule: reduce_clause.induct)
+  case (1 x l1 l2 l3 l4 c)
+  thm 1
+  value ?case
+  have "reduce_clause x (l1 # l2 # l3 # l4 # c) = 
+    (let (x',cs) = reduce_clause (x+1) ((x, False) # l3 # l4 # c) in
+    (x', [[(x, True), l1, l2]] @ cs))"
+    by simp
+  have "x \<le> fst (reduce_clause x (l1 # l2 # l3 # l4 # c))"
+    by (metis (no_types, lifting) "1"
+        \<open>reduce_clause x (l1 # l2 # l3 # l4 # c) = (let (x', cs) = reduce_clause (x + 1) ((x, False) # l3 # l4 # c) in (x', [[(x, True), l1, l2]] @ cs))\<close>
+        add_leD1 case_prod_unfold split_pairs)
+  then show ?case by simp
+next
+  case ("2_1" x)
+  then show ?case by simp
+next
+  case ("2_2" x v)
+  then show ?case by simp
+next
+  case ("2_3" x v vb)
+  then show ?case by simp
+next
+  case ("2_4" x v vb vd)
+  then show ?case by simp
+qed
+
+lemma all_below_monotone:
+  assumes "y \<ge> x" and "x \<triangleright> q"
+  shows "y \<triangleright> q"
+proof -
+  value ?thesis
+  have "\<forall> clause \<in> set q. \<forall> (y,_) \<in> set clause.  y < x" 
+    using all_below_def assms(2) by presburger
+  then have "\<forall> clause \<in> set q. \<forall> (term,_) \<in> set clause.  term < y" 
+    using assms(1) by fastforce
+  thus ?thesis 
+    by simp
+qed
+
+lemma reduce_maintains_bounds:
+  assumes "x \<triangleright> q"
+  shows "\<forall>clause \<in> set q. \<exists>x'. x \<le> x' \<and> x' \<triangleright> [clause] \<and> 
+         set (snd (reduce_clause x' clause)) \<subseteq> set (reduce x q)"
+proof -
+qed
+
 text \<open> If q is satisfiable, and all the symbols in q are below x, 
   then reduce x q is also satisfiable. \<close>
+
 theorem sat_reduce2:
   assumes "satisfiable q" and "x \<triangleright> q"
   shows "satisfiable (reduce x q)"
-proof -
-  from assms obtain valuation where eval_reduce: "evaluate q valuation"
-    unfolding satisfiable_def by auto
-
-  have "\<forall> reduced_clause \<in> set (reduce x q). evaluate_clause valuation reduced_clause"
-    proof (induct x q rule: reduce.induct)
-      case (1 uu)
-      then show ?case by simp
-    next
-      case (2 x c q)
-      thm 2
-      value ?case
-      then show ?case try
+proof - 
+  obtain valuation where eval_reduce: "evaluate q valuation"
+    using assms(1) satisfiable_def by blast
+  have "\<forall> clause \<in> set q. evaluate_clause valuation clause"
+    using eval_reduce evaluate_def by blast
+  then have "\<forall>clause \<in> (set q). \<exists> x'. set (reduce x' [clause]) \<subseteq> set (reduce x q)"
+    by (simp add: case_prod_unfold reduce_preserves_clauses)
+  then have "\<forall>clause \<in> (set q). \<exists> x'.  x' \<triangleright> [clause] \<and> set (reduce x' [clause]) \<subseteq> set (reduce x q)"
+    by (metis (no_types, lifting) append_self_conv assms(2) case_prod_unfold reduce.simps(1,2) reduce_maintains_bounds)
+  then have "\<forall> clause \<in> set q. \<exists>x'. x' \<triangleright> [clause] \<and> 
+    evaluate (snd (reduce_clause  x' clause)) valuation" 
+    using \<open>\<forall>clause\<in>set q. evaluate_clause valuation clause\<close> sat_implies_reduced_sat by blast
+  then have "\<forall> clause \<in> set q. \<exists>x'. x' \<triangleright> [clause] \<and>
+    (\<forall> reduced_clause \<in> set (snd (reduce_clause  x' clause)). evaluate_clause valuation reduced_clause)" 
+    using evaluate_def by blast
+  then have "\<forall> reduced_clause \<in> set (reduce x q). evaluate_clause valuation reduced_clause"
+  using assms(2) \<open>\<forall> clause \<in> set q. evaluate_clause valuation clause\<close>
+  proof (induct x q rule: reduce.induct)
+    case (1 uu)
+    then show ?case by simp
+  next
+    case (2 x0 clause rest)
+    have "reduce x0 (clause # rest) = 
+      (let (x', cs) = reduce_clause x0 clause in cs @ reduce x' rest)"
+      by simp
+    then have expand: "set (reduce x0 (clause # rest)) = 
+      set (snd (reduce_clause x0 clause)) \<union> set (reduce (fst (reduce_clause x0 clause)) rest)"
+      by (auto simp: Let_def split_def)
+    
+    have clause_in: "clause \<in> set (clause # rest)" by simp
+    
+    have "evaluate_clause valuation clause"
+      by (simp add: "2.prems"(3)) 
+    moreover have "x0 \<triangleright> [clause]"
+      using "2.prems"(2) by auto
+    ultimately have "\<forall> reduced_clause \<in> set (snd (reduce_clause x0 clause)). 
+      evaluate_clause valuation reduced_clause"
+      using evaluate_def sat_implies_reduced_sat by blast
+    
+    moreover have "\<forall> reduced_clause \<in> set (reduce (fst (reduce_clause x0 clause)) rest). 
+      evaluate_clause valuation reduced_clause"
+    proof -
+      have "fst (reduce_clause x0 clause) \<triangleright> rest"
+        by (meson "2.prems"(2) all_below_def all_below_monotone list.set_intros(2) reduce_clause_preserves_bound)
+      moreover have "\<forall> clause \<in> set rest. evaluate_clause valuation clause"
+        using "2.prems"(2) by (simp add: "2.prems"(3))
+      ultimately show ?thesis
+        using "2.hyps" by (metis "2.prems"(1) list.set_intros(2) prod.exhaust_sel)
     qed
-
+    
+    ultimately show ?case
+      using expand by auto
+  qed
   thus ?thesis
     using evaluate_def satisfiable_def by auto
 qed
