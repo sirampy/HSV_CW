@@ -1039,6 +1039,136 @@ theorem sat_reduce2:
   shows "satisfiable (reduce thm_x thm_q)"
 proof -
 
+  have main_lemma: "\<exists>valuation. evaluate thm_q valuation \<Longrightarrow> thm_x \<triangleright> thm_q \<Longrightarrow>
+    \<forall> q_valuation.  evaluate thm_q q_valuation \<longrightarrow> 
+      (\<exists> valuation. evaluate (reduce thm_x thm_q) valuation 
+      \<and> (\<forall>symbol. (symbol < thm_x) \<longrightarrow> q_valuation symbol = valuation symbol))"
+  proof (induct thm_q arbitrary: thm_x)
+    case Nil
+    then show ?case by (auto simp: evaluate_def)
+  next
+    case (Cons q qs)
+
+    show ?case
+    proof (intro allI impI)
+      fix q_valuation
+      assume eval_q_valuation: "evaluate (q # qs) q_valuation"
+
+      (* Unwrap reduce definition *)
+      obtain next_x q_reduced where reduce_q: "(next_x, q_reduced) = reduce_clause thm_x q"
+        using prod.collapse by blast
+
+      then have next_x_ge: "next_x \<ge> thm_x" 
+        by (metis fst_conv reduce_clause_fst_ge)
+      
+      then have next_x_below_qs: "next_x \<triangleright> qs"
+        using Cons.prems(2) all_below_monotone by fastforce
+
+      have reduce_expand: "reduce thm_x (q # qs) = q_reduced @ reduce next_x qs" 
+        by (metis reduce_q case_prod_conv reduce.simps(2))
+
+      (* Extract evaluations *)
+      have eval_clause_q: "evaluate_clause q_valuation q"
+        using eval_q_valuation by (simp add: evaluate_def)
+      
+      have eval_qs: "evaluate qs q_valuation"
+        using eval_q_valuation by (simp add: evaluate_def)
+
+      (* Get valuation for q_reduced *)
+      have x_below_q: "thm_x \<triangleright> [q]" 
+        using Cons.prems(2) by auto
+
+      then obtain q_val where q_val_props:
+        "evaluate q_reduced q_val"
+        "\<forall>symbol < thm_x. q_val symbol = q_valuation symbol"
+        by (metis reduce_q eval_clause_q sat_clause_implies_reduced_sat split_pairs)
+
+      (* Get valuation for reduce next_x qs using IH *)
+      have "\<exists>a. evaluate qs a" using eval_qs by blast
+      
+      then obtain qs_val where qs_val_props:
+        "evaluate (reduce next_x qs) qs_val"
+        "\<forall>symbol < next_x. q_valuation symbol = qs_val symbol"
+        using Cons.hyps[OF _ next_x_below_qs] eval_qs by blast
+
+      (* Build merged valuation *)
+      define merged where "merged = (\<lambda>s. if s < thm_x then q_valuation s 
+                                         else if s < next_x then q_val s 
+                                         else qs_val s)"
+
+      (* Show merged satisfies q_reduced *)
+      have symbols_q_reduced: 
+        "\<forall>s \<in> symbols q_reduced. s \<in> symbols_clause q \<or> (thm_x \<le> s \<and> s < next_x)"
+        using x_below_q reduce_q by (metis fstI reduced_clause_symbols_bounded snd_conv)
+
+      have symbols_q_lt: "\<forall>s \<in> symbols_clause q. s < thm_x"
+        using x_below_q by (metis (no_types, opaque_lifting) Sup_empty Sup_insert all_below_imp_symbols_lt list.map(1,2) list.set(1) list.simps(15) sup_bot.right_neutral symbols_def)
+
+      have "\<forall>s \<in> symbols q_reduced. merged s = q_val s"
+      proof
+        fix s assume "s \<in> symbols q_reduced"
+        then have "s \<in> symbols_clause q \<or> (thm_x \<le> s \<and> s < next_x)"
+          using symbols_q_reduced by blast
+        then show "merged s = q_val s"
+        proof
+          assume "s \<in> symbols_clause q"
+          then have "s < thm_x" using symbols_q_lt by blast
+          then show ?thesis 
+            using merged_def q_val_props(2) by auto
+        next
+          assume "thm_x \<le> s \<and> s < next_x"
+          then show ?thesis using merged_def by auto
+        qed
+      qed
+
+      then have eval_q_reduced_merged: "evaluate q_reduced merged"
+        using q_val_props(1) evaluate_cong_on_query_symbols by blast
+
+      (* Show merged satisfies reduce next_x qs *)
+      have "\<forall>s \<in> symbols (reduce next_x qs). merged s = qs_val s"
+      proof
+        fix s assume "s \<in> symbols (reduce next_x qs)"
+        show "merged s = qs_val s"
+        proof (cases "s < next_x")
+          case True
+          then have "s < thm_x \<Longrightarrow> merged s = q_valuation s"
+            using merged_def by auto
+          then have "s < thm_x \<Longrightarrow> q_valuation s = qs_val s"
+            using qs_val_props(2) next_x_ge by auto
+          then show ?thesis try
+        next
+          case False
+          then show ?thesis using merged_def
+            using next_x_ge by force
+        qed
+      qed
+
+      then have eval_qs_reduced_merged: "evaluate (reduce next_x qs) merged"
+        using qs_val_props(1) evaluate_cong_on_query_symbols by blast
+
+      (* Combine *)
+      have "evaluate (reduce thm_x (q # qs)) merged"
+        using reduce_expand eval_q_reduced_merged eval_qs_reduced_merged
+        using evaluate_def by auto
+
+      moreover have "\<forall>symbol < thm_x. q_valuation symbol = merged symbol"
+        using merged_def by auto
+
+      ultimately show "\<exists>valuation. evaluate (reduce thm_x (q # qs)) valuation \<and>
+                                   (\<forall>symbol < thm_x. q_valuation symbol = valuation symbol)"
+        by blast
+    qed
+  qed
+
+  then show ?thesis
+    using assms(1,2) satisfiable_def by blast
+qed
+
+theorem sat_reduce2:
+  assumes "satisfiable thm_q" and "thm_x \<triangleright> thm_q"
+  shows "satisfiable (reduce thm_x thm_q)"
+proof -
+
   have "\<exists>valuation. evaluate thm_q valuation \<Longrightarrow> thm_x \<triangleright> thm_q \<Longrightarrow>
     \<forall> q_valuation.  evaluate thm_q  q_valuation \<longrightarrow> 
       (\<exists> valuation. evaluate (reduce thm_x thm_q) valuation 
@@ -1073,6 +1203,10 @@ proof -
       using Cons.prems(2) by fastforce
 
     then have "reduce thm_x (q # qs) = (let (x',cs) = reduce_clause thm_x q in cs @ reduce x' qs)" by simp
+  
+    then have "reduce thm_x (q # qs) = (q_reduced @ reduce next_x qs)" 
+      by (metis \<open>(next_x, q_reduced) = reduce_clause thm_x q\<close> case_prod_conv)
+
 
     (* obtain qs_valuation satisfying q # qs *)
     then have "\<exists>a. evaluate (q # qs) a \<and> evaluate qs a \<and> thm_x \<triangleright> qs" 
@@ -1128,16 +1262,91 @@ proof -
     then have "evaluate (reduce next_x qs) mixed_valuation"
       using \<open>evaluate (reduce next_x qs) mixed_valuation \<and> (\<forall>symbol<next_x. q_valuation symbol = mixed_valuation symbol)\<close> by blast 
 
-    then have "evaluate q_reduced mixed_valuation" sorry
+    then have "\<forall> symbol< next_x. q_valuation symbol = mixed_valuation symbol"
+      using \<open>evaluate (reduce next_x qs) mixed_valuation \<and> (\<forall>symbol<next_x. q_valuation symbol = mixed_valuation symbol)\<close> by blast
+
+     have XBelow_q: "thm_x \<triangleright> [q]"
+      using Cons.prems(2) by simp
+
+    have Symbols_head_or_fresh:
+      "\<forall> s \<in> symbols q_reduced. s \<in> symbols_clause q \<or> (thm_x \<le> s \<and> s < next_x)"
+      using XBelow_q \<open>(next_x, q_reduced) = reduce_clause thm_x q\<close> by (metis fst_eqD reduced_clause_symbols_bounded snd_conv)
+
+    (* Symbols of q are < thm_x, hence also < next_x since next_x \<ge> thm_x *)
+    have Symbols_q_lt_x: "\<forall> s \<in> symbols_clause q. s < thm_x"
+      using XBelow_q by (metis (no_types, opaque_lifting) Sup_empty Sup_insert all_below_imp_symbols_lt list.map(1,2) list.set(1,2) sup_bot.right_neutral
+          symbols_def)
+
+    have "\<forall> symbol \<in> symbols q_reduced. symbol < next_x"
+    proof
+      fix s assume Hs: "s \<in> symbols q_reduced"
+      from Symbols_head_or_fresh[rule_format, OF Hs]
+      show "s < next_x"
+      proof
+        assume "s \<in> symbols_clause q"
+        then have "s < thm_x" using Symbols_q_lt_x by auto
+        moreover have "thm_x \<le> next_x" using \<open>next_x \<ge> thm_x\<close> by simp
+        ultimately show "s < next_x" by (meson less_le_trans)
+      next
+        assume "thm_x \<le> s \<and> s < next_x"
+        then show "s < next_x" by simp
+      qed
+    qed
+
+    then have "\<forall> symbol \<in> symbols q_reduced. q_valuation symbol = mixed_valuation symbol" 
+      using \<open>\<forall>symbol<next_x. q_valuation symbol = mixed_valuation symbol\<close> by blast
+
+    then have "evaluate q_reduced  mixed_valuation" using evaluate_cong_on_query_symbols 
+      using \<open>evaluate q_reduced q_valuation \<and> (\<forall>symbol<thm_x. q_valuation symbol = base_valuation symbol)\<close> by presburger
+
+    then have "evaluate q_reduced mixed_valuation" by simp
+
+    then have "evaluate (q_reduced @ reduce next_x qs) mixed_valuation" 
+      using \<open>evaluate (reduce next_x qs) mixed_valuation\<close> evaluate_def by auto
 
 
-    then show ?case try
+    have Agree_lt_x':
+      "\<forall>symbol<thm_x. q_valuation symbol = mixed_valuation symbol"
+      using \<open>\<forall> symbol< next_x. q_valuation symbol = mixed_valuation symbol\<close> \<open>thm_x \<le> next_x\<close> by auto
+
+    (* Conclude the desired implication for this specific q_valuation *)
+    have
+      "evaluate (q # qs) q_valuation \<longrightarrow>
+         (\<exists> valuation.
+             evaluate (reduce thm_x (q # qs)) valuation \<and>
+             (\<forall>symbol<thm_x. q_valuation symbol = valuation symbol))"
+    proof
+      assume Ev_q_qs: "evaluate (q # qs) q_valuation"
+      (* We already have evaluate (reduce thm_x (q # qs)) mixed_valuation from earlier *)
+      have Ev_reduced_mixed:
+        "evaluate (reduce thm_x (q # qs)) mixed_valuation"
+        using \<open>reduce thm_x (q # qs) = q_reduced @ reduce next_x qs\<close>
+              \<open>evaluate q_reduced mixed_valuation\<close>
+              \<open>evaluate (reduce next_x qs) mixed_valuation\<close>
+        using \<open>evaluate (q_reduced @ reduce next_x qs) mixed_valuation\<close> by argo
+      show "\<exists> valuation.
+               evaluate (reduce thm_x (q # qs)) valuation \<and>
+               (\<forall>symbol<thm_x. q_valuation symbol = valuation symbol)"
+        by (intro exI[of _ mixed_valuation] conjI)
+           (use Ev_reduced_mixed Agree_lt_x' in auto)
+    qed
+
+    then have " \<forall>q_valuation.
+       evaluate (q # qs) q_valuation \<longrightarrow>
+           evaluate
+            (reduce thm_x (q # qs))
+            mixed_valuation \<and>
+           (\<forall>symbol<thm_x.
+               q_valuation symbol =
+               mixed_valuation symbol)" sorry
+
+
+    then show ?case by auto
   qed
   
 
-  then show ?thesis try
+  then show ?thesis
     using assms(1,2) satisfiable_def by blast
-
 qed
 
 (*then have "\<exists>valuation. evaluate thm_q valuation \<Longrightarrow> thm_x \<triangleright> thm_q \<Longrightarrow> evaluate (reduce thm_x thm_q) valuation" 
