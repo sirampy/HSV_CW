@@ -1135,8 +1135,33 @@ proof -
     then have "\<forall> symbol< next_x. q_valuation symbol = mixed_valuation symbol"
       using \<open>evaluate (reduce next_x qs) mixed_valuation \<and> (\<forall>symbol<next_x. q_valuation symbol = mixed_valuation symbol)\<close> by blast
 
-    then have "\<forall> symbol \<in> symbols q_reduced. symbol < next_x"
-      sorry
+     have XBelow_q: "thm_x \<triangleright> [q]"
+      using Cons.prems(2) by simp
+
+    have Symbols_head_or_fresh:
+      "\<forall> s \<in> symbols q_reduced. s \<in> symbols_clause q \<or> (thm_x \<le> s \<and> s < next_x)"
+      using XBelow_q \<open>(next_x, q_reduced) = reduce_clause thm_x q\<close> by (metis fst_eqD reduced_clause_symbols_bounded snd_conv)
+
+    (* Symbols of q are < thm_x, hence also < next_x since next_x \<ge> thm_x *)
+    have Symbols_q_lt_x: "\<forall> s \<in> symbols_clause q. s < thm_x"
+      using XBelow_q by (metis (no_types, opaque_lifting) Sup_empty Sup_insert all_below_imp_symbols_lt list.map(1,2) list.set(1,2) sup_bot.right_neutral
+          symbols_def)
+
+    have "\<forall> symbol \<in> symbols q_reduced. symbol < next_x"
+    proof
+      fix s assume Hs: "s \<in> symbols q_reduced"
+      from Symbols_head_or_fresh[rule_format, OF Hs]
+      show "s < next_x"
+      proof
+        assume "s \<in> symbols_clause q"
+        then have "s < thm_x" using Symbols_q_lt_x by auto
+        moreover have "thm_x \<le> next_x" using \<open>next_x \<ge> thm_x\<close> by simp
+        ultimately show "s < next_x" by (meson less_le_trans)
+      next
+        assume "thm_x \<le> s \<and> s < next_x"
+        then show "s < next_x" by simp
+      qed
+    qed
 
     then have "\<forall> symbol \<in> symbols q_reduced. q_valuation symbol = mixed_valuation symbol" 
       using \<open>\<forall>symbol<next_x. q_valuation symbol = mixed_valuation symbol\<close> by blast
@@ -1149,18 +1174,44 @@ proof -
     then have "evaluate (q_reduced @ reduce next_x qs) mixed_valuation" 
       using \<open>evaluate (reduce next_x qs) mixed_valuation\<close> evaluate_def by auto
 
-    then have "\<forall>q_valuation.
-       evaluate qs q_valuation \<longrightarrow>
-           evaluate (reduce next_x qs)
+
+    have Agree_lt_x':
+      "\<forall>symbol<thm_x. q_valuation symbol = mixed_valuation symbol"
+      using \<open>\<forall> symbol< next_x. q_valuation symbol = mixed_valuation symbol\<close> \<open>thm_x \<le> next_x\<close> by auto
+
+    (* Conclude the desired implication for this specific q_valuation *)
+    have
+      "evaluate (q # qs) q_valuation \<longrightarrow>
+         (\<exists> valuation.
+             evaluate (reduce thm_x (q # qs)) valuation \<and>
+             (\<forall>symbol<thm_x. q_valuation symbol = valuation symbol))"
+    proof
+      assume Ev_q_qs: "evaluate (q # qs) q_valuation"
+      (* We already have evaluate (reduce thm_x (q # qs)) mixed_valuation from earlier *)
+      have Ev_reduced_mixed:
+        "evaluate (reduce thm_x (q # qs)) mixed_valuation"
+        using \<open>reduce thm_x (q # qs) = q_reduced @ reduce next_x qs\<close>
+              \<open>evaluate q_reduced mixed_valuation\<close>
+              \<open>evaluate (reduce next_x qs) mixed_valuation\<close>
+        using \<open>evaluate (q_reduced @ reduce next_x qs) mixed_valuation\<close> by argo
+      show "\<exists> valuation.
+               evaluate (reduce thm_x (q # qs)) valuation \<and>
+               (\<forall>symbol<thm_x. q_valuation symbol = valuation symbol)"
+        by (intro exI[of _ mixed_valuation] conjI)
+           (use Ev_reduced_mixed Agree_lt_x' in auto)
+    qed
+
+    then have " \<forall>q_valuation.
+       evaluate (q # qs) q_valuation \<longrightarrow>
+           evaluate
+            (reduce thm_x (q # qs))
             mixed_valuation \<and>
-           (\<forall>symbol<next_x.
+           (\<forall>symbol<thm_x.
                q_valuation symbol =
                mixed_valuation symbol)" sorry
 
 
-    then show ?case 
-      by (metis \<open>evaluate (q_reduced @ reduce next_x qs) mixed_valuation\<close> \<open>reduce thm_x (q # qs) = q_reduced @ reduce next_x qs\<close>
-          \<open>thm_x \<le> next_x\<close> evaluate_def list.set_intros(2) order.strict_trans2)
+    then show ?case by auto
   qed
   
 
