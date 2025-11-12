@@ -593,7 +593,7 @@ proof (induct x c rule: reduce_clause.induct)
     using one_component_must_satisfy by (simp add: evaluate_clause_def)
   then have "evaluate [l1 # l2 # l3 # l4 # c] valuation" 
     using clause_satisfies
-    by (simp add: evaluate_def)
+    by (simp add: evaluate_def)    
 
   then show ?case by simp
 next
@@ -1027,9 +1027,122 @@ lemma sat_clause_implies_reduced_sat:
   assumes "evaluate_clause clause_valuation c" 
   and "x \<triangleright> [c]"
   shows "\<exists> valuation.   
-    (\<forall>symbol. (symbol < x \<or> symbol \<ge> fst (reduce_clause x c)) \<longrightarrow> clause_valuation symbol = valuation symbol)
+    (\<forall>symbol. (symbol < x) \<longrightarrow> clause_valuation symbol = valuation symbol)
     \<and> evaluate (snd (reduce_clause x c)) valuation"
-  sorry
+  using assms
+proof (induct x c arbitrary: clause_valuation rule: reduce_clause.induct)
+  case (1 x l1 l2 l3 l4 c)
+  term ?case
+  thm "1"
+  obtain x' cs where red_eq: "(x', cs) = reduce_clause (x+1) ((x,False) # l3 # l4 # c)" 
+    using prod.collapse by blast
+
+  have reduce_eq: "reduce_clause x (l1 # l2 # l3 # l4 # c) = (x', [[(x, True), l1, l2]] @ cs)" 
+    by (metis case_prod_conv red_eq reduce_clause.simps(1))
+  then have Head_or_Tail:
+    "evaluate_literal clause_valuation l1
+     \<or> evaluate_literal clause_valuation l2
+     \<or> (\<exists>l \<in> set (l3 # l4 # c). evaluate_literal clause_valuation l)" 
+    using "1.prems"(1) evaluate_clause_def by auto
+
+  then have Xplus1_below_tail: "(x+1) \<triangleright> [((x,False) # l3 # l4 # c)]"
+    using "1"(3) by fastforce
+
+  then have all_symbols_below_x: "\<forall> (symbol,_) \<in> set (l1 # l2 # l3 # l4 # c). symbol < x" 
+    using "1.prems"(2) by auto
+
+  then consider
+    (HeadEvaluates) "evaluate_literal clause_valuation l1 \<or> evaluate_literal clause_valuation l2"
+  | (TailEvaluates)  "\<exists>l \<in> set (l3 # l4 # c). evaluate_literal clause_valuation l"
+    using Head_or_Tail by blast
+  then show ?case 
+  proof cases
+    case HeadEvaluates
+    thm HeadEvaluates
+    thm 1
+    term ?thesis
+    define reduced_valuation where
+      "reduced_valuation s = (if s = x then False else clause_valuation s)"
+
+    then have "\<forall>symbol<x. clause_valuation symbol = reduced_valuation symbol"
+      using \<open>reduced_valuation \<equiv> \<lambda>s. if s = x then False else clause_valuation s\<close> nat_less_le by presburger
+
+    then have symbols_below_x :"\<forall> (symbol,_) \<in> set [l1, l2]. symbol < x" 
+      using all_symbols_below_x by auto
+    then have "\<forall> (symbol,_) \<in> set [l1, l2]. reduced_valuation symbol = clause_valuation symbol" 
+      by (simp add: \<open>reduced_valuation \<equiv> \<lambda>s. if s = x then False else clause_valuation s\<close> case_prod_unfold)
+    then have "evaluate_clause reduced_valuation [(x, True), l1, l2]" 
+      using HeadEvaluates evaluate_clause_def by auto
+
+    then have "evaluate_clause reduced_valuation ((x, False) # l3 # l4 # c)" 
+      using \<open>reduced_valuation \<equiv> \<lambda>s. if s = x then False else clause_valuation s\<close> evaluate_clause_def by force
+
+    then have "\<exists>valuation.
+     (\<forall>symbol<x + 1. reduced_valuation symbol = valuation symbol) \<and> evaluate (snd (reduce_clause (x + 1) ((x, False) # l3 # l4 # c))) valuation"
+      using "1.hyps" Xplus1_below_tail by presburger
+
+    then obtain valuation where "(\<forall>symbol<x + 1. reduced_valuation symbol = valuation symbol) \<and> evaluate (snd (reduce_clause (x + 1) ((x, False) # l3 # l4 # c))) valuation"
+      by auto
+
+    then have "\<forall> (symbol,_) \<in> set [(x, True), l1, l2]. symbol < x + 1" using symbols_below_x by auto
+
+    then have "\<forall> (symbol,_) \<in> set [(x, True), l1, l2]. valuation symbol = reduced_valuation symbol" 
+      using
+        \<open>(\<forall>symbol<x + 1. reduced_valuation symbol = valuation symbol) \<and> evaluate (snd (reduce_clause (x + 1) ((x, False) # l3 # l4 # c))) valuation\<close>
+      by blast
+        
+    then have a: "\<forall>l \<in> set [(x, True), l1, l2]. evaluate_literal reduced_valuation l = evaluate_literal valuation l" by auto
+
+    then have b: "\<exists>l \<in> set [(x, True), l1, l2]. evaluate_literal reduced_valuation l" 
+      using \<open>evaluate_clause reduced_valuation [(x, True), l1, l2]\<close> evaluate_clause_def by simp
+
+    then have "\<exists>l \<in> set [(x, True), l1, l2]. evaluate_literal reduced_valuation l 
+      \<and> evaluate_literal reduced_valuation l = evaluate_literal valuation l" using a b by simp
+   then have "\<exists>l \<in> set [(x, True), l1, l2]. evaluate_literal valuation l" by blast
+    
+    then have "evaluate_clause valuation [(x, True), l1, l2]"
+      using evaluate_clause_def by presburger
+
+    then have "evaluate ([[(x, True), l1, l2]] @ cs) valuation"
+      by (metis (no_types, lifting)
+          \<open>(\<forall>symbol<x + 1. reduced_valuation symbol = valuation symbol) \<and> evaluate (snd (reduce_clause (x + 1) ((x, False) # l3 # l4 # c))) valuation\<close>
+          append_Cons evaluate_def red_eq self_append_conv2 set_ConsD snd_eqD)
+
+    then have "(\<forall>symbol<x. clause_valuation symbol = valuation symbol) \<and> evaluate (snd (reduce_clause x (l1 # l2 # l3 # l4 # c))) valuation" 
+      using
+        \<open>(\<forall>symbol<x + 1. reduced_valuation symbol = valuation symbol) \<and> evaluate (snd (reduce_clause (x + 1) ((x, False) # l3 # l4 # c))) valuation\<close>
+        \<open>\<forall>symbol<x. clause_valuation symbol = reduced_valuation symbol\<close> reduce_eq by auto
+
+    then show ?thesis by auto
+  next
+    case TailEvaluates
+    thm TailEvaluates
+    thm 1
+    term ?thesis
+    define partial_valuation where
+      "partial_valuation s = (if s = x then True else clause_valuation s)" 
+
+    then show ?thesis sorry
+  qed
+  next
+    case ("2_1" x)
+    thm "2_1"
+    term ?case
+    then show ?case 
+      using evaluate_clause_def by simp
+  next
+    case ("2_2" x v)
+    then show ?case
+      using "2_2.prems"(1) evaluate_clause_def evaluate_def by auto
+  next
+    case ("2_3" x v vb)
+    then show ?case 
+      using "2_3.prems"(1) evaluate_clause_def evaluate_def by auto
+  next
+    case ("2_4" x v vb vd)
+    then show ?case
+      using "2_4.prems"(1) evaluate_clause_def evaluate_def by auto
+qed
 
 text \<open> If q is satisfiable, and all the symbols in q are below x, 
   then reduce x q is also satisfiable. \<close>
