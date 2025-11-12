@@ -1282,18 +1282,15 @@ proof -
       then have "evaluate q_reduced mixed_valuation" 
         using q_val_props(1) evaluate_cong_on_query_symbols by auto
 
-      (* Combine to show mixed_valuation satisfies the full reduced query *)
       then have "evaluate (q_reduced @ reduce next_x qs) mixed_valuation" 
         using mixed_props(1) evaluate_def by auto
 
       then have eval_reduced: "evaluate (reduce thm_x (q # qs)) mixed_valuation"
         using reduce_expand by argo
 
-      (* Show agreement below thm_x *)
       have "\<forall>symbol < thm_x. base_valuation symbol = mixed_valuation symbol"
         using q_val_props(2) mixed_props(2) next_x_ge by auto
 
-      (* Conclude *)
       then show "\<exists>valuation. evaluate (reduce thm_x (q # qs)) valuation \<and>
                             (\<forall>symbol < thm_x. base_valuation symbol = valuation symbol)"
         using eval_reduced by blast
