@@ -1122,7 +1122,41 @@ proof (induct x c arbitrary: clause_valuation rule: reduce_clause.induct)
     define partial_valuation where
       "partial_valuation s = (if s = x then True else clause_valuation s)" 
 
-    then show ?thesis sorry
+    have Agree_lt_x_partial: "\<forall>symbol<x. clause_valuation symbol = partial_valuation symbol"
+      using \<open>partial_valuation \<equiv> \<lambda>s. if s = x then True else clause_valuation s\<close> by force
+    have Eval_head_partial: "evaluate_clause partial_valuation [(x, True), l1, l2]"
+      using \<open>partial_valuation \<equiv> \<lambda>s. if s = x then True else clause_valuation s\<close> evaluate_clause_def by auto
+    have Eval_tail_prefixed_partial:
+      "evaluate_clause partial_valuation ((x, False) # l3 # l4 # c)"
+      using TailEvaluates \<open>partial_valuation \<equiv> \<lambda>s. if s = x then True else clause_valuation s\<close> all_symbols_below_x evaluate_clause_def by fastforce
+
+    have Xplus1_below_tail: "(x+1) \<triangleright> [((x, False) # l3 # l4 # c)]"
+      using "1.prems"(2) by auto
+    from "1.hyps"[rule_format, OF Eval_tail_prefixed_partial Xplus1_below_tail]
+    obtain valuation where
+      Agree_lt_x1: "\<forall>symbol<x+1. partial_valuation symbol = valuation symbol" and
+      Eval_cs_val:  "evaluate (snd (reduce_clause (x + 1) ((x, False) # l3 # l4 # c))) valuation"
+      by blast
+
+    then have "evaluate cs valuation" 
+      by (metis red_eq snd_eqD)
+
+    then have "evaluate_literal valuation (x, True)" 
+      using Agree_lt_x1 \<open>partial_valuation \<equiv> \<lambda>s. if s = x then True else clause_valuation s\<close> by fastforce
+
+    then have "evaluate_clause valuation [(x, True), l1, l2]" 
+      by (simp add: evaluate_clause_def)
+
+    then have "evaluate ([[(x, True), l1, l2]] @ cs) valuation" 
+      using \<open>evaluate cs valuation\<close> evaluate_def by auto
+
+    then have " (\<forall>symbol<x. clause_valuation symbol = valuation symbol) \<and> evaluate (snd (reduce_clause x (l1 # l2 # l3 # l4 # c))) valuation"
+      using Agree_lt_x1 Agree_lt_x_partial reduce_eq by force
+
+    (* Conclude the existential *)
+    show ?thesis
+      using \<open>(\<forall>symbol<x. clause_valuation symbol = valuation symbol) \<and> evaluate (snd (reduce_clause x (l1 # l2 # l3 # l4 # c))) valuation\<close>
+      by blast
   qed
   next
     case ("2_1" x)
@@ -1180,7 +1214,6 @@ proof -
       have reduce_expand: "reduce thm_x (q # qs) = q_reduced @ reduce next_x qs" 
         by (metis reduce_def case_prod_conv reduce.simps(2))
 
-      (* Extract evaluations *)
       have eval_qs: "evaluate qs base_valuation"
         using eval_base by (simp add: evaluate_def)
         
@@ -1190,13 +1223,11 @@ proof -
       have x_below_q: "thm_x \<triangleright> [q]" 
         using Cons.prems(2) by auto
 
-      (* Get q_valuation for q_reduced *)
       then obtain q_valuation where q_val_props:
         "evaluate q_reduced q_valuation" 
         "\<forall>symbol < thm_x. q_valuation symbol = base_valuation symbol"
         by (metis reduce_def eval_clause_q sat_clause_implies_reduced_sat split_pairs)
 
-      (* Since all symbols in (q # qs) are < thm_x, base_valuation and q_valuation agree on all relevant symbols *)
       have symbols_lt: "\<forall>symbol \<in> symbols (q # qs). symbol < thm_x"
         using Cons.prems(2) all_below_imp_symbols_lt by presburger
 
@@ -1206,7 +1237,6 @@ proof -
       then have eval_q_valuation: "evaluate (q # qs) q_valuation" 
         using evaluate_cong_on_query_symbols eval_base by presburger
 
-      (* Apply IH to get mixed_valuation for the tail *)
       have "\<exists>a. evaluate qs a \<and> next_x \<triangleright> qs"
         using eval_qs next_x_below by blast
 
